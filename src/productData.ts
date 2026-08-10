@@ -298,6 +298,16 @@ export const categories: ProductCategory[] = [
   'Hardware, Accessories & Locks',
 ];
 
+export const categoryUrls: Record<ProductCategory, string> = {
+  'Partitioning Systems': 'https://duracube.com.au/products/partitioning-systems/',
+  'Locker Systems': 'https://duracube.com.au/products/locker-systems/',
+  'Bench Seating': 'https://duracube.com.au/products/bench-seating/',
+  'Privacy Panels': 'https://duracube.com.au/products/privacy-panels/',
+  'Vanities': 'https://duracube.com.au/products/vanities/',
+  'DuraSafe Compact Laminate': 'https://duracube.com.au/product/compact-laminate-cut-to-size-service/',
+  'Hardware, Accessories & Locks': 'https://duracube.com.au/accessories-hardware/',
+};
+
 export const projects = [
   { name: 'Weston Bears Park', sector: 'Sport & Recreation', image: `${wp}/2026/03/duracubewestonbearsmarch2026_shonproductions-76-scaled-700x500.jpg` },
   { name: 'St Marys Baseball Club, Monfarville Reserve', sector: 'Sport & Recreation', image: `${wp}/2026/02/5-700x500.png` },

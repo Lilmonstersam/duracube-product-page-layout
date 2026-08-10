@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import {
   ArrowRight,
   Check,
@@ -12,10 +12,16 @@ import {
   Sparkles,
   X,
 } from 'lucide-react';
-import { categories, productFromHash, products, projects, routeFor, type Product } from './productData';
+import { categories, categoryUrls, productFromHash, products, projects, routeFor, type Product } from './productData';
 
 const logo = 'https://duracube.com.au/wp-content/uploads/2025/01/screenshot-2025-02-10-at-25953pm.png';
 const fallbackImage = 'https://duracube.com.au/wp-content/uploads/2017/01/pedestal-mount-overhead-braced-pob.jpg';
+
+const breadcrumbLabel = (product: Product) => product.name
+  .replace(/\s*\([^)]*\)\s*$/, '')
+  .replace(/\s*[–-]\s*/g, ' ')
+  .replace(/\s+/g, ' ')
+  .trim();
 
 function ProductImage({ src, alt, className = '' }: { src: string; alt: string; className?: string }) {
   return (
@@ -142,10 +148,21 @@ function Header({ product }: { product: Product }) {
 }
 
 function ProductPage({ product }: { product: Product }) {
-  const siblings = products.filter((item) => item.category === product.category && item.slug !== product.slug);
+  const siblings = useMemo(
+    () => products.filter((item) => item.category === product.category && item.slug !== product.slug),
+    [product.category, product.slug],
+  );
   const recommended = siblings.slice(0, 4);
   const projectOffset = categories.indexOf(product.category) % Math.max(1, projects.length - 2);
   const relatedProjects = [...projects.slice(projectOffset, projectOffset + 3), ...projects].slice(0, 3);
+  const [comparisonSlugs, setComparisonSlugs] = useState(() => siblings.slice(0, 2).map((item) => item.slug));
+  const [stickyVisible, setStickyVisible] = useState(false);
+  const lastScrollY = useRef(0);
+  const selectedComparisons = comparisonSlugs
+    .map((slug) => siblings.find((item) => item.slug === slug))
+    .filter((item): item is Product => Boolean(item));
+  const comparisonItems = [product, ...selectedComparisons];
+  const categoryUrl = categoryUrls[product.category];
 
   useEffect(() => {
     document.title = product.title;
@@ -154,13 +171,30 @@ function ProductPage({ product }: { product: Product }) {
     window.scrollTo({ top: 0, behavior: 'instant' });
   }, [product]);
 
+  useEffect(() => {
+    setComparisonSlugs(siblings.slice(0, 2).map((item) => item.slug));
+  }, [siblings]);
+
+  useEffect(() => {
+    lastScrollY.current = window.scrollY;
+    const handleScroll = () => {
+      const currentScrollY = window.scrollY;
+      const shouldShow = currentScrollY > 400 && currentScrollY < lastScrollY.current;
+      setStickyVisible(shouldShow);
+      lastScrollY.current = currentScrollY;
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
   return (
     <>
       <Header product={product} />
       <main>
         <section className="hero section-shell">
           <nav className="breadcrumbs" aria-label="Breadcrumb">
-            <a href="https://duracube.com.au/">Home</a><span>/</span><a href="https://duracube.com.au/products/">Products</a><span>/</span><span>{product.code}</span>
+            <a href="https://duracube.com.au/">Home</a><span>/</span><a href={categoryUrl}>{product.category}</a><span>/</span><span>{breadcrumbLabel(product)}</span>
           </nav>
           <div className="hero-grid">
             <div className="hero-copy reveal">
@@ -237,7 +271,9 @@ function ProductPage({ product }: { product: Product }) {
           <div className="section-shell">
             <div className="section-heading">
               <div><p className="eyebrow">Keep exploring</p><h2>Recommended {product.category.toLowerCase()}</h2></div>
-              <span className="section-count">{siblings.length.toString().padStart(2, '0')} alternatives</span>
+              <a className="section-count" href={categoryUrl} aria-label={`View all ${product.category}`}>
+                {siblings.length.toString().padStart(2, '0')} alternatives <ArrowRight size={18} />
+              </a>
             </div>
             <div className="product-card-grid">
               {recommended.map((item) => (
@@ -271,16 +307,49 @@ function ProductPage({ product }: { product: Product }) {
           <section className="compare-band">
             <div className="section-shell compare-inner">
               <div className="compare-copy"><p className="eyebrow">Compare systems</p><h2>Choose the right configuration.</h2><p>Review adjacent systems from the same product family without leaving the mock-up.</p></div>
-              <div className="compare-table" role="table" aria-label={`Compare ${product.name}`}>
-                {[product, ...siblings.slice(0, 2)].map((item, index) => (
-                  <a className={`compare-column ${index === 0 ? 'current' : ''}`} href={routeFor(item)} key={item.slug}>
-                    <span>{index === 0 ? 'Current system' : 'Alternative'}</span>
+              <div
+                className="compare-table"
+                role="table"
+                aria-label={`Compare ${product.name}`}
+                style={{ '--compare-columns': comparisonItems.length } as CSSProperties}
+              >
+                {comparisonItems.map((item, index) => {
+                  const selectorIndex = index - 1;
+                  const availableOptions = siblings.filter((option) => (
+                    option.slug === item.slug || !comparisonSlugs.some((slug, slot) => slot !== selectorIndex && slug === option.slug)
+                  ));
+
+                  return (
+                  <article className={`compare-column ${index === 0 ? 'current' : ''}`} key={`${index}-${item.slug}`}>
+                    {index === 0 ? (
+                      <span className="compare-kicker">Current system</span>
+                    ) : (
+                      <label className="compare-selector">
+                        <span>Compare with</span>
+                        <span className="compare-select-control">
+                          <select
+                            value={item.slug}
+                            onChange={(event) => setComparisonSlugs((current) => current.map((slug, slot) => (
+                              slot === selectorIndex ? event.target.value : slug
+                            )))}
+                            aria-label={`Select comparison product ${index}`}
+                          >
+                            {availableOptions.map((option) => (
+                              <option value={option.slug} key={option.slug}>{option.code} · {option.name}</option>
+                            ))}
+                          </select>
+                          <ChevronDown size={16} aria-hidden="true" />
+                        </span>
+                      </label>
+                    )}
                     <ProductImage src={item.image} alt="" />
                     <strong>{item.code}</strong>
                     <p>{item.name}</p>
                     <ul>{item.features.slice(0, 3).map((feature) => <li key={feature}><Check size={14} />{feature}</li>)}</ul>
-                  </a>
-                ))}
+                    <a className="compare-view-link" href={routeFor(item)}>View product <ArrowRight size={14} /></a>
+                  </article>
+                  );
+                })}
               </div>
             </div>
           </section>
@@ -295,6 +364,15 @@ function ProductPage({ product }: { product: Product }) {
         </section>
       </main>
       <Footer />
+      <aside className={`sticky-cta ${stickyVisible ? 'is-visible' : ''}`} aria-hidden={!stickyVisible}>
+        <div className="section-shell sticky-cta-inner">
+          <div>
+            <strong>Ready to start your project?</strong>
+            <span>Get precise specifications and quotes for your floorplan.</span>
+          </div>
+          <a className="button button-dark" href="https://duracube.com.au/send-us-your-plans/">Send us your plan <ArrowRight size={15} /></a>
+        </div>
+      </aside>
     </>
   );
 }
